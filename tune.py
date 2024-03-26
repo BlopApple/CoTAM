@@ -35,7 +35,8 @@ def load_cotam(fname, label_texts, K):
     for data in dataset:
         label2dataset[list(data.keys())[0]].append(data)
 
-    dataset = [items for label_text in label_texts for items in np.random.choice(label2dataset[label_text], K, replace=False)]
+    # dataset = [items for label_text in label_texts for items in np.random.choice(label2dataset[label_text], K, replace=False)]
+    dataset = [items for label_text in label_texts for items in label2dataset[label_text]]
     
     np.random.shuffle(dataset)
 
@@ -118,13 +119,17 @@ class RobertaClassifier:
                 
         return acc
     
+
+dataset_train = load_cotam(fname, label_texts, K)
 dataset_test = load_data("sst2", "validation", None)
+
+print(f'train: {len(dataset_train)} | valid: {len(dataset_test)}')
 
 accs = []
 
 for run in range(10):
     
-    dataset_train = load_cotam(fname, label_texts, K)
+    # dataset_train = load_cotam(fname, label_texts, K)
 
     classifier = RobertaClassifier(model_name='roberta-large', num_labels=len(label_texts), learning_rate=1e-5, device=device_idx)
 
