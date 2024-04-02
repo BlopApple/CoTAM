@@ -1,8 +1,8 @@
-# Train the student model
 import argparse
 import os.path as osp
 import numpy as np
 import torch
+import json
 import jsonlines
 
 from datasets import load_dataset, Dataset
@@ -14,8 +14,6 @@ from transformers.trainer_utils import set_seed
 
 NUM_OPTIONS = 5
 K = 10
-
-# Train the student model
 
 def load_cqa(data_dir, complete=True):
     def gen_data(dataset):
@@ -41,6 +39,26 @@ def load_cqa(data_dir, complete=True):
         dataset_processed['test'] = dataset_test
     
     return dataset_processed
+
+def load_cqa_synthesized(data_dir):
+    def prepare_input(example):
+        choices = example['choices']
+        full_sample = example['question']
+        for i in range(len(choices)):
+            full_sample += f' ({chr(97 + i)}) {choices[i]}'
+        example['input'] = full_sample
+        example['label'] = example['answer']
+        return example
+
+    file_dict = {'train': osp.join(data_dir, 'cqa_train_2000_0_0.json'), 'valid': osp.join(data_dir, 'cqa_test_2000_0_0.json')}
+    dataset = load_dataset('json', data_files=file_dict)
+    dataset = dataset.map(prepare_input,
+                          remove_columns=['question', 'choices', 'answer', 'response'])
+    train_test_split = dataset['train'].train_test_split(test_size=0.1, seed=0)
+    dataset['train'] = train_test_split['train']
+    dataset['test'] = train_test_split['test']
+
+    return dataset
 
 def set_all_seed(seed):
     np.random.seed(seed)
@@ -94,7 +112,8 @@ def get_exp_dir(args):
 class Model:
     def __init__(self, args):
         self.args = args
-        self.dataset = load_cqa(args.data_dir, args.complete)
+        # self.dataset = load_cqa(args.data_dir, args.complete)
+        self.dataset = load_cqa_synthesized(args.data_dir)
         self.tokenizer = AutoTokenizer.from_pretrained(args.from_pretrained)
 
         def tokenize_function(examples):
@@ -108,6 +127,7 @@ class Model:
                 label_output_encodings = self.tokenizer(examples['label'], max_length=256, truncation=True)
 
             model_inputs['labels'] = label_output_encodings['input_ids']
+
             return model_inputs
 
         self.tokenized_datasets = self.dataset.map(
@@ -176,8 +196,8 @@ class Model:
         trainer_kwargs = {
             'model': model,
             'args': training_args,
-            'train_dataset': self.tokenized_datasets["train"],
-            'eval_dataset': {'test': self.tokenized_datasets["test"], },
+            'train_dataset': self.tokenized_datasets['train'],
+            'eval_dataset': {'test': self.tokenized_datasets['test'], },
             'data_collator': data_collator,
             'tokenizer': self.tokenizer,
             'compute_metrics': self.metrics,
@@ -212,19 +232,15 @@ class Model:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='datasets/')
-    parser.add_argument('--max_steps', type=int, default=32)
-    parser.add_argument('--eval_steps', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=16)
-    # parser.add_argument('--max_steps', type=int, default=10000)
-    # parser.add_argument('--eval_steps', type=int, default=250)
-    # parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--max_steps', type=int, default=10000)
+    parser.add_argument('--eval_steps', type=int, default=250)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--optimizer_name', type=str, default='AdamW')
-    parser.add_argument('--lr', type=float, default=1e-5)
-    # parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--lr', type=float, default=5e-5)
     parser.add_argument('--exp_name', type=str, required=True)
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--data_seed', type=int, default=None)
-    parser.add_argument('--from_pretrained', type=str, default='roberta-large')
+    parser.add_argument('--from_pretrained', type=str, default='google/t5-v1_1-base')
     parser.add_argument('--max_input_length', type=int, default=1024)
     parser.add_argument('--grad_steps', type=int, default=1)
     parser.add_argument('--local_rank', type=int, default=-1)
@@ -235,26 +251,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    current_seed = args.seed
-    for i in range(10):
-        args.seed = current_seed + i
-
-        set_all_seed(args.seed)
-        model = Model(args)
-        model.train()
-
-    # data = load_cqa(args.data_dir, args.complete)
-    # print(data)
-    # idx = 1
-    # for d in data['train']:
-    #     print(d)
-    #     idx += 1
-    #     if idx > 10:
-    #         break
-    # print()
-    # idx = 1
-    # for d in data['test']:
-    #     print(d)
-    #     idx += 1
-    #     if idx > 10:
-    #         break
+    set_all_seed(args.seed)
+    model = Model(args)
+    model.train()
