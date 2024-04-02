@@ -108,7 +108,6 @@ class Model:
                 label_output_encodings = self.tokenizer(examples['label'], max_length=256, truncation=True)
 
             model_inputs['labels'] = label_output_encodings['input_ids']
-
             return model_inputs
 
         self.tokenized_datasets = self.dataset.map(
