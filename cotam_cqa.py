@@ -9,10 +9,10 @@ from tqdm import tqdm
 from constant import openai_key
 
 client = openai.OpenAI(api_key=openai_key)
-model_engine = "gpt-3.5-turbo-instruct"
+model_engine = "gpt-3.5-turbo"
 
 def create_query(sentence, label_text, other_label_text):
-     return f'''"{sentence}"
+     return f'''"{sentence} answer: {label_text}"
 Please think step by step:
 1. What are some other attributes of the above sentence except \"{label_text}\"?
 2. How to write a similar sentence with these attributes and \"{other_label_text}\"?
@@ -34,6 +34,8 @@ def preprocess_data(data):
         if data['choices']['label'][j] == data['answerKey']:
             items['answer'] = choices[j]
             break
+    items['response'] = ''
+
     return items
 
 def attribute_manipulate(data):
@@ -46,22 +48,23 @@ def attribute_manipulate(data):
     for other_label_text in other_label_texts:
         query = create_query(sentence, label_text, other_label_text)
         try:
-            response = client.chat.completions.create(
+            query_response = client.chat.completions.create(
                         model=model_engine,
                         temperature=0.,
                         messages=[
                             {'role': 'user', 'content': query},
                         ],
-                        ).choices[0]['message']['content']
+                        ).choices[0].message.content
         except:
-            response = ""
-        other_sentence = decode_response(response)
+            query_response = ""
+        other_sentence = decode_response(query_response)
 
         if other_sentence is not None:
             response = dict()
             response['question'] = other_sentence
             response['choices'] = data['choices']
             response['answer'] = other_label_text
+            response['response'] = query_response
 
             responses.append(response)
     return responses
@@ -69,8 +72,7 @@ def attribute_manipulate(data):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # parser.add_argument('--n_sample', type=int, default=2000)
-    parser.add_argument('--n_sample', type=int, default=1)
+    parser.add_argument('--n_sample', type=int, default=2000)
     parser.add_argument('--seed_split', type=int, default=0)
     parser.add_argument('--seed_sample', type=int, default=0)
 
