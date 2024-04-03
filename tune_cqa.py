@@ -50,14 +50,10 @@ def load_cqa(data_dir, complete=True):
     return dataset_processed
 
 def load_cqa_synthesized(data_dir):
-    file_dict = {'train': osp.join(data_dir, 'cqa_train_2000_0_0.json'), 'valid': osp.join(data_dir, 'cqa_test_2000_0_0.json')}
+    file_dict = {'train': osp.join(data_dir, 'cqa_train_2000_0_0.json'), 'test': osp.join(data_dir, 'cqa_test_2000_0_0.json')}
     dataset = load_dataset('json', data_files=file_dict)
     dataset = dataset.map(prepare_input,
                           remove_columns=['question', 'choices', 'answer', 'response'])
-    train_test_split = dataset['train'].train_test_split(test_size=0.1, seed=0)
-    dataset['train'] = train_test_split['train']
-    dataset['test'] = train_test_split['test']
-
     return dataset
 
 def set_all_seed(seed):
