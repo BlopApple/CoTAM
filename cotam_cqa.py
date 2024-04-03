@@ -12,11 +12,11 @@ client = openai.OpenAI(api_key=openai_key)
 model_engine = "gpt-3.5-turbo"
 
 def create_query(sentence, label_text, other_label_text):
-     return f'''"{sentence} answer: {label_text}"
+     return f'''"{sentence}"
 Please think step by step:
-1. What are some other attributes of the above sentence except \"{label_text}\"?
-2. How to write a similar sentence with these attributes and \"{other_label_text}\"?
-3. Write such a sentence without any other explanation.'''
+1. What are some other attributes of the above question that can give the answer \"{label_text}\"?
+2. How to write a similar question with these attributes that can give the answer \"{other_label_text}\"?
+3. Write such a question without any other explanation.'''
 
 def decode_response(response):
     for line in response.split("\n"):
