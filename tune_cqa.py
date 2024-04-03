@@ -24,7 +24,7 @@ def prepare_input(example):
     example['label'] = example['answer']
     return example
 
-def load_cqa(data_dir, complete=True):
+def load_cqa(args):
     def gen_data(dataset):
         for data in dataset:
             choices = [c for c in data.keys() if "(response)" not in c]
@@ -35,13 +35,13 @@ def load_cqa(data_dir, complete=True):
                         full_sample += f' ({chr(97 + i)}) {choices[i]}'
                     yield {"input": full_sample, "label": k}
     
-    dataset = [items for items in jsonlines.open(osp.join(data_dir, 'csqa.cotam.train.jsonl')) if len(items) == 2 * NUM_OPTIONS - 1]
+    dataset = [items for items in jsonlines.open(osp.join(args.data_dir, 'csqa.cotam.train.jsonl')) if len(items) == 2 * NUM_OPTIONS - 1]
     dataset_train = Dataset.from_generator(gen_data, gen_kwargs={"dataset": dataset})
     dataset_train = dataset_train.shuffle()
     dataset_processed = dataset_train.train_test_split(test_size=((len(dataset_train) - K * NUM_OPTIONS * NUM_OPTIONS) / len(dataset_train)))
 
-    if complete:
-        dataset_test = load_dataset('json', data_files=osp.join(data_dir, 'cqa_test.json'))['train']
+    if args.complete:
+        dataset_test = load_dataset('json', data_files=osp.join(args.data_dir, 'cqa_test.json'))['train']
         dataset_test = dataset_test.map(prepare_input,
                             remove_columns=['question', 'choices', 'answer', 'id', 'abstractive_explanation', 'extractive_explanation'])
         dataset_processed['train'] = dataset_train
@@ -49,9 +49,41 @@ def load_cqa(data_dir, complete=True):
     
     return dataset_processed
 
-def load_cqa_synthesized(data_dir):
-    file_dict = {'train': osp.join(data_dir, 'cqa_train_2000_0_0.json'), 'test': osp.join(data_dir, 'cqa_test_2000_0_0.json')}
+def load_cqa_synthesized(args):
+    file_dict = {'train': osp.join(args.data_dir, f'cqa_train_{args.dataset}.json'), 'test': osp.join(args.data_dir, f'cqa_test_{args.dataset}.json')}
     dataset = load_dataset('json', data_files=file_dict)
+
+    if args.subsample == 0:
+        def gen_data(dataset):
+            for data in dataset:
+                if data['response'] == '':
+                    yield data
+        
+        subsampled_dataset = Dataset.from_generator(gen_data, gen_kwargs={"dataset": dataset['train']})
+        dataset['train'] = subsampled_dataset
+
+    elif args.subsample > 0:
+        def gen_data(dataset):
+            data_choices = []
+            for data in dataset:
+                if data['response'] == '':
+                    yield data
+                    if len(data_choices) > 0:
+                        subsample = np.random.choice(data_choices, min(args.subsample, len(data_choices)), replace=False)
+                        for sample in subsample:
+                            yield sample
+                    data_choices = []
+                else:
+                    data_choices.append(data)
+        
+            if len(data_choices) > 0:
+                subsample = np.random.choice(data_choices, min(args.subsample, len(data_choices)), replace=False)
+                for sample in subsample:
+                    yield sample
+        
+        subsampled_dataset = Dataset.from_generator(gen_data, gen_kwargs={"dataset": dataset['train']})
+        dataset['train'] = subsampled_dataset
+
     dataset = dataset.map(prepare_input,
                           remove_columns=['question', 'choices', 'answer', 'response'])
     return dataset
@@ -109,9 +141,9 @@ class Model:
     def __init__(self, args):
         self.args = args
         if args.old:
-            self.dataset = load_cqa(args.data_dir, args.complete)
+            self.dataset = load_cqa(args)
         else:
-            self.dataset = load_cqa_synthesized(args.data_dir)
+            self.dataset = load_cqa_synthesized(args)
         self.tokenizer = AutoTokenizer.from_pretrained(args.from_pretrained)
 
         def tokenize_function(examples):
@@ -230,6 +262,7 @@ class Model:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, default='datasets/')
+    parser.add_argument('--dataset', type=str, default='2000_0_0')
     parser.add_argument('--max_steps', type=int, default=10000)
     parser.add_argument('--eval_steps', type=int, default=250)
     parser.add_argument('--batch_size', type=int, default=64)
@@ -247,6 +280,7 @@ if __name__ == '__main__':
     parser.add_argument('--ckpt', type=int, default=0)
     parser.add_argument('--old', action='store_true')
     parser.add_argument('--complete', action='store_true')
+    parser.add_argument('--subsample', type=int, default=-1)
 
     args = parser.parse_args()
 
