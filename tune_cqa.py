@@ -242,21 +242,18 @@ class Model:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         model.to(device)
-        response_lists = []
+        
+        response_list = []
         for i in range(len(dataset)):
-            response_list = []
-            for j in range(len(dataset[0])):
-                input_text = dataset[i][j]['input']
-                input_ids = self.tokenizer(input_text, return_tensors="pt").input_ids.to(device)
+            input_text = dataset[i]['input']
+            label_text = dataset[i]['label']
+            input_ids = self.tokenizer(input_text, return_tensors='pt').input_ids.to(device)
 
-                with torch.no_grad():  # if you're using PyTorch
-                    output_ids = model.generate(input_ids, max_new_tokens=128)
-                output_text = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
-                response_list.append(output_text)
-
-            response_lists.append(response_list)
-        return response_lists
-
+            with torch.no_grad():  # if you're using PyTorch
+                output_ids = model.generate(input_ids, max_new_tokens=128)
+            output_text = self.tokenizer.decode(output_ids[0], skip_special_tokens=True)
+            response_list.append({'input': input_text, 'label': label_text, 'output': output_text})
+        return response_list
 
 
 if __name__ == '__main__':
